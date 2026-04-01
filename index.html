@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>電子紙終端機分析系統</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&family=Space+Mono:wght@400;700&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
@@ -296,10 +299,10 @@ html, body { height:100%; background:var(--bg); color:var(--text); font-family:v
 
 <!-- ESL Quick Bar -->
 <div id="esl-bar">
-  <div class="esl-chip" onclick="loadESL('VU.PA','vusion')">VU.PA <span class="chg" id="chip-vusion">Vusion</span></div>
-  <div class="esl-chip" onclick="loadESL('248070.KS','solum')">248070 <span class="chg" id="chip-solum">SoluM</span></div>
-  <div class="esl-chip active" onclick="loadESL('8069.TWO','eink')">8069 <span class="chg" id="chip-eink">元太</span></div>
-  <div class="esl-chip" onclick="loadESL('PRIC-B.ST','pricer')">PRIC-B <span class="chg" id="chip-pricer">Pricer</span></div>
+  <div class="esl-chip" onclick="loadESL(this,'VU.PA','vusion')">VU.PA <span class="chg">Vusion</span></div>
+  <div class="esl-chip" onclick="loadESL(this,'248070.KS','solum')">248070 <span class="chg">SoluM</span></div>
+  <div class="esl-chip active" onclick="loadESL(this,'8069.TWO','eink')">8069 <span class="chg">元太</span></div>
+  <div class="esl-chip" onclick="loadESL(this,'PRIC-B.ST','pricer')">PRIC-B <span class="chg">Pricer</span></div>
   <div class="esl-chip" style="opacity:.5;cursor:default">未上市 <span class="chg">雲創</span></div>
 </div>
 
@@ -472,6 +475,8 @@ var ESL_MAP = {
 var PROXIES = [
   function(u){ return 'https://corsproxy.io/?'+encodeURIComponent(u); },
   function(u){ return 'https://api.allorigins.win/raw?url='+encodeURIComponent(u); },
+  function(u){ return 'https://thingproxy.freeboard.io/fetch/'+u; },
+  function(u){ return 'https://api.codetabs.com/v1/proxy?quest='+encodeURIComponent(u); },
 ];
 
 // ═══════════════════════════════════════
@@ -500,9 +505,9 @@ window.addEventListener('load', function(){
 // ═══════════════════════════════════════
 // Data Loading
 // ═══════════════════════════════════════
-function loadESL(ticker, id){
+function loadESL(el, ticker, id){
   document.querySelectorAll('.esl-chip').forEach(function(c){ c.classList.remove('active'); });
-  event.currentTarget.classList.add('active');
+  el.classList.add('active');
   var name = ESL_MAP[id] ? ESL_MAP[id].name : ticker;
   showFallback(ticker, name);
   loadData(ticker, name);
@@ -550,12 +555,24 @@ function loadData(ticker, name){
 
 function fetchYahoo(ticker, cb, proxyIdx){
   proxyIdx = proxyIdx || 0;
+  // 顯示目前嘗試第幾個 proxy
+  if(proxyIdx===0){
+    document.getElementById('hero-chg').innerHTML = '<span class="neu">⟳ 連線中 (' + (proxyIdx+1) + '/' + PROXIES.length + ')...</span>';
+  }
   var url = 'https://query1.finance.yahoo.com/v8/finance/chart/' + encodeURIComponent(ticker) + '?interval=1d&range=180d';
   var proxyUrl = PROXIES[proxyIdx] ? PROXIES[proxyIdx](url) : null;
   if(!proxyUrl){ cb(null); return; }
 
-  fetch(proxyUrl)
-    .then(function(r){ return r.json(); })
+  // 加入 8 秒 timeout
+  var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  var timer = controller ? setTimeout(function(){ controller.abort(); }, 8000) : null;
+  var fetchOpts = controller ? { signal: controller.signal } : {};
+
+  fetch(proxyUrl, fetchOpts)
+    .then(function(r){
+      if(timer) clearTimeout(timer);
+      return r.json();
+    })
     .then(function(j){
       try {
         var result = j.chart.result[0];
@@ -597,8 +614,10 @@ function fetchYahoo(ticker, cb, proxyIdx){
       }
     })
     .catch(function(){
-      if(proxyIdx+1 < PROXIES.length){ fetchYahoo(ticker, cb, proxyIdx+1); }
-      else { cb(null); }
+      if(proxyIdx+1 < PROXIES.length){
+        document.getElementById('hero-chg').innerHTML = '<span class="neu">⟳ 換線重試 (' + (proxyIdx+2) + '/' + PROXIES.length + ')...</span>';
+        fetchYahoo(ticker, cb, proxyIdx+1);
+      } else { cb(null); }
     });
 }
 

@@ -276,16 +276,6 @@ html, body { height:100%; background:var(--bg); color:var(--text); font-family:v
 }
 .cc-btn.active { background:var(--green); color:#000; border-color:var(--green); }
 
-/* ── Loading overlay ── */
-#page-loading {
-  position:fixed; inset:0; background:var(--bg);
-  display:flex; flex-direction:column; align-items:center; justify-content:center;
-  z-index:999; transition:opacity .4s;
-}
-#page-loading .pl-logo { font-family:var(--mono); font-size:13px; color:var(--green); letter-spacing:3px; margin-bottom:16px; }
-#page-loading .pl-bar { width:200px; height:2px; background:var(--border); border-radius:1px; overflow:hidden; }
-#page-loading .pl-fill { height:100%; background:var(--green); animation:load 1.5s ease forwards; }
-@keyframes load { from{width:0} to{width:100%} }
 
 /* ── Scrollbar ── */
 ::-webkit-scrollbar { width:4px; height:4px; }
@@ -294,12 +284,6 @@ html, body { height:100%; background:var(--bg); color:var(--text); font-family:v
 </style>
 </head>
 <body>
-
-<!-- Loading -->
-<div id="page-loading">
-  <div class="pl-logo">E-PAPER TERMINAL</div>
-  <div class="pl-bar"><div class="pl-fill"></div></div>
-</div>
 
 <!-- Top Bar -->
 <div id="topbar">
@@ -494,11 +478,7 @@ var PROXIES = [
 // Init
 // ═══════════════════════════════════════
 window.addEventListener('load', function(){
-  setTimeout(function(){
-    var el = document.getElementById('page-loading');
-    el.style.opacity = '0';
-    setTimeout(function(){ el.style.display='none'; }, 400);
-  }, 1500);
+  showFallback('8069.TWO', '元太科技');
   loadData('8069.TWO', '元太科技');
 
   // drag drop
@@ -523,18 +503,20 @@ window.addEventListener('load', function(){
 function loadESL(ticker, id){
   document.querySelectorAll('.esl-chip').forEach(function(c){ c.classList.remove('active'); });
   event.currentTarget.classList.add('active');
-  loadData(ticker, ESL_MAP[id] ? ESL_MAP[id].name : ticker);
+  var name = ESL_MAP[id] ? ESL_MAP[id].name : ticker;
+  showFallback(ticker, name);
+  loadData(ticker, name);
 }
 
 function searchTicker(){
   var v = document.getElementById('ticker-input').value.trim().toUpperCase();
   if(!v) return;
-  // Taiwan stock: append .TWO or .TW
   var ticker = v;
   if(/^\d{4,6}$/.test(v)){
     ticker = v + '.TWO';
   }
   document.querySelectorAll('.esl-chip').forEach(function(c){ c.classList.remove('active'); });
+  showFallback(ticker, v);
   loadData(ticker, v);
 }
 
@@ -621,8 +603,36 @@ function fetchYahoo(ticker, cb, proxyIdx){
 }
 
 function showError(){
-  document.getElementById('hero-price').textContent = '無資料';
-  document.getElementById('hero-chg').textContent = '請確認代碼格式（台股請加 .TWO 或 .TW）';
+  document.getElementById('hero-price').textContent = '資料載入失敗';
+  document.getElementById('hero-chg').textContent = 'CORS 限制，請稍後重試或使用 Safari';
+}
+
+// 靜態備用資料，確保介面立即可見
+var FALLBACK_DATA = {
+  '8069.TWO': { name:'元太科技', curr:136.5, prev:147.0, h52:286.0, l52:136.0, vol:12000 },
+  'VU.PA':    { name:'Vusion S.A.', curr:109.7, prev:106.8, h52:278.0, l52:88.0, vol:150000 },
+  '248070.KS':{ name:'SoluM Co.', curr:17750, prev:18200, h52:20750, l52:13870, vol:50000 },
+  'PRIC-B.ST':{ name:'Pricer AB', curr:2.74, prev:2.82, h52:9.92, l52:2.5, vol:300000 },
+};
+
+function showFallback(ticker, name){
+  var fb = FALLBACK_DATA[ticker];
+  if(!fb){ fb = { name:name, curr:0, prev:0, h52:0, l52:0, vol:0 }; }
+  document.getElementById('hero-ticker').textContent = ticker;
+  document.getElementById('hero-name').textContent = fb.name;
+  document.getElementById('hero-price').textContent = fb.curr>0 ? fb.curr.toLocaleString() : '—';
+  var chg = fb.prev ? (fb.curr-fb.prev)/fb.prev*100 : 0;
+  var cls = chg>0?'up':chg<0?'dn':'neu';
+  var sym = chg>0?'▲':chg<0?'▼':'';
+  document.getElementById('hero-chg').innerHTML = '<span class="'+cls+'">'+sym+' '+chg.toFixed(2)+'% · 靜態備用</span>';
+
+  // Minimal state so signals can render
+  STATE.ticker = ticker; STATE.name = fb.name;
+  STATE.current = fb.curr; STATE.prev = fb.prev;
+  STATE.h52 = fb.h52; STATE.l52 = fb.l52; STATE.vol = fb.vol;
+  if(fb.h52) document.getElementById('stat-h52').textContent = fb.h52.toLocaleString();
+  if(fb.l52) document.getElementById('stat-l52').textContent = fb.l52.toLocaleString();
+  if(fb.vol) document.getElementById('stat-vol').textContent = (fb.vol/1000).toFixed(0)+'K';
 }
 
 // ═══════════════════════════════════════
